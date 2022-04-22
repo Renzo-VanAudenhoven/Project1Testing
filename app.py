@@ -34,7 +34,7 @@ surface = create_main_surface()
 menu_font = pygame.font.SysFont(None,120)
 gameover_font = pygame.font.SysFont(None,150)
 soundlib = Sounds.SoundLibrary.find_audio_files()
-scrollspeed = 75
+scrollspeed = 150
 running = False
 
 def draw_text(text,font,color,surface,x,y):
@@ -120,17 +120,15 @@ def game(skin):
     music_player
     
     while(running):
-        mine_chance = randint(0,400)
+        mine_chance = randint(0,120)
         if mine_chance==4:
             state.mines.append(Mine())
-        enemy_chance = randint(0,600)
+        enemy_chance = randint(0,120)
         match enemy_chance:
             case 1:
                 state.enemies.append(Enemy(1))
             case 2:
                 state.enemies.append(Enemy(2))
-        #if enemy_chance == 4 or enemy_chance == 5 or enemy_chance == 6:
-        #    state.enemies.append(Enemy())
         elapsed_seconds = clock.tick() / 1000
         state.update(elapsed_seconds)
         render_frame(surface,state)
@@ -169,7 +167,7 @@ def game_over():
 
         for event in pygame.event.get():
             if event.type==pygame.QUIT:
-                return pygame.quit()
+                pygame.quit()
             if event.type == MOUSEBUTTONDOWN:
                 if event.button == 1:
                     click = True
@@ -213,8 +211,6 @@ def event_listener(state,elapsed_seconds):
     #    noise = randint(0, 5)
     #    Sounds.SoundLibrary.play_random_explosion(soundlib, noise)
 
-    return True
-
 def create_main_surface():
     width = 1024
     height = 768
@@ -233,38 +229,39 @@ def load_image(path):
 
 def draw_centered(surface,image,x,y):
     (width, height) = image.get_size()
-    surface.blit(image,(x-(width/2),y-(height/2)))
+    surface.blit(image,[x-(width/2),y-(height/2)])
 
-def process_collisions(spaceship,mines,enemies,bullets):
+def update_objects(elapsed_seconds,list):
+    j = 0
+    while j < len(list):
+        object = list[j]
+        object.update(elapsed_seconds)
+        if object.disposed:
+            list.remove(object)
+        else: 
+            j += 1
+
+def process_collisions(spaceship,mines,enemies,bullets,frames=[]):
+    frames_explosion = [load_image(f'assets/images/sprites/explosion/{i}.png') for i in range(1,10)]
+    for bullet in bullets:
+        for enemy in enemies:
+            if bullet.hitbox.colliderect(enemy.hitbox):
+                bullet.disposed = True
+                enemy.disposed = True
+                frames.append(FrameBasedAnimation(frames_explosion,0.1,enemy.x,enemy.y))
+                Sounds.SoundLibrary.play_random_explosion(soundlib, randint(0,5))
+
     mine_hitbox = [mine.hitbox for mine in mines]
     enemy_hitbox = [enemy.hitbox for enemy in enemies]
-    #enemy_hitbox = []
-    bullet_hitbox = []
+
     ship_hits_mine = spaceship.hitbox.collidelist(mine_hitbox)
     ship_hits_enemy = spaceship.hitbox.collidelist(enemy_hitbox)
+    
     if ship_hits_mine !=-1 or ship_hits_enemy!=-1:
         Sounds.SoundLibrary.play_random_explosion(soundlib, randint(0,5))
-        running = False
+        frames.append(FrameBasedAnimation(frames_explosion,0.1,spaceship,spaceship.y))
         pygame.mixer.music.stop()
-        sleep(1)
-        game_over()
-
-
-    #for bullet in bullets:
-    #    bullet_hitbox.append(bullet.hitbox)
-    #    for hitbox in enemy_hitbox:
-    #        if hitbox.collidelist(bullet_hitbox)!=-1:
-    #            print("DIED")
-    #            bullets.remove(bullet)
-    #            #bullet_hitbox.remove()
-    
-    #for enemy in enemies:
-    #    enemy_hitbox.append(enemy.hitbox)
-    #    for hitbox in bullet_hitbox:
-    #        if hitbox.collidelist(enemy_hitbox)!=-1:
-    #            print("DIED")
-    #            enemies.remove(enemy)        
-        
+        game_over()       
 
 class State:
     def __init__(self,skin):
@@ -274,30 +271,22 @@ class State:
         self.cooldown = Cooldown(0.2)
         self.mines = [Mine()]
         self.enemies = [Enemy(1)]
-
-        frames_explosion = [load_image(f'assets/images/sprites/explosion/{i}.png') for i in range(1,10)]
-        self.animation_explosion = FrameBasedAnimation(frames_explosion,0.1)
-
+        self.explosions = []
+        
     def update(self, elapsed_seconds):
         self.player.update(elapsed_seconds)
-        self.animation_explosion.update(elapsed_seconds)
+        update_objects(elapsed_seconds,self.explosions)
         self.background.update(elapsed_seconds)
-        for bullet in self.bullets:
-            bullet.update(elapsed_seconds)
-            if bullet.disposed:
-                self.bullets.pop(0)
         self.cooldown.update(elapsed_seconds)
+        process_collisions(self.player,self.mines,self.enemies,self.bullets,self.explosions)
+        update_objects(elapsed_seconds,self.bullets)
+        update_objects(elapsed_seconds,self.enemies)
+                
         for mine in self.mines:
             mine.update(elapsed_seconds)
             if mine.disposed:
                 self.mines.pop(0)
-        for enemy in self.enemies:
-            enemy.update(elapsed_seconds)
-            if enemy.disposed:
-                self.enemies.pop(0)
-        process_collisions(self.player,self.mines,self.enemies,self.bullets)
-                
-        
+
     def render(self,surface):
         self.background.render(surface)
         for enemy in self.enemies:
@@ -307,7 +296,9 @@ class State:
             mine.render(surface)
         for bullet in self.bullets:
             bullet.render(surface)
-        self.animation_explosion.render(surface,500,500)
+        for explosion in self.explosions:
+            explosion.render(surface)
+        
     
 class Background:
     def __init__(self):
@@ -358,13 +349,15 @@ class Spaceship:
         self.animation_raccoon.render(surface,self.x,self.y)
         
 class FrameBasedAnimation:
-    def __init__(self,frames,seconds_per_frame):
+    def __init__(self,frames,seconds_per_frame,x=0,y=0):
+        self.x = x
+        self.y = y
         self.time_passed = 0
         self.frames = frames
         self.seconds_per_frame = seconds_per_frame
         self.counter = 0
         self.__disposed = False
-
+        
     def dispose(self):
         self.__disposed = True
     
@@ -372,11 +365,11 @@ class FrameBasedAnimation:
     def disposed(self):
         return self.__disposed
 
-    def render(self,surface,x,y):
+    def render(self,surface):
         frame_index = math.floor(self.time_passed / self.seconds_per_frame)
         if frame_index < len(self.frames):
             frame = self.frames[frame_index]
-            draw_centered(surface,frame,x,y)
+            draw_centered(surface,frame,self.x,self.y)
         else:
             self.dispose()
     
@@ -400,7 +393,7 @@ class Bullet():
         self.bullet = load_image("assets/images/sprites/bullets/small.png")
         self.__time_left = 5
         self.disposed = False
-        self.hitbox = (self.x-10,self.y-30,20,20)
+        self.hitbox = pygame.Rect(self.x-10,self.y-30,20,20)
 
     def update(self,elapsed_seconds):
         self.y -= self.speed * elapsed_seconds
@@ -410,7 +403,7 @@ class Bullet():
     
     def render(self,surface):
         draw_centered(surface,self.bullet,self.x+1,self.y-20)
-        self.hitbox = (self.x-9,self.y-29,19,19)
+        self.hitbox = pygame.Rect(self.x-9,self.y-29,19,19)
         pygame.draw.rect(surface,(0,0,0),self.hitbox,-1)
         
 class Cooldown:
@@ -446,13 +439,13 @@ class Mine():
 
     def render(self,surface):
         draw_centered(surface,self.mine,self.x,self.y)
-        self.hitbox = pygame.Rect(self.x-44,self.y-50,88,125)
+        self.hitbox = pygame.Rect(self.x-44,self.y-40,88,115)
         pygame.draw.rect(surface,(0,0,0),self.hitbox,-1)
 
 class Enemy():
     def __init__(self,enemyid):
         self.x = randint(100,900)
-        self.y = 0
+        self.y = -100
         self.enemyid = enemyid
         self.enemy1 = [pygame.transform.scale(load_image(f'assets/images/sprites/enemies/enemy1/fox{i}.png'),(144,144)) for i in range(1,5)]        
         self.animation_enemy1 = CircularFrameBasedAnimation(self.enemy1,0.2)
