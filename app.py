@@ -241,7 +241,7 @@ def update_objects(elapsed_seconds,list):
         else: 
             j += 1
 
-def process_collisions(spaceship,mines,enemies,bullets,frames=[]):
+def process_collisions(spaceship,mines,enemies,bullets,enemybullets,frames=[]):
     frames_explosion = [load_image(f'assets/images/sprites/explosion/{i}.png') for i in range(1,10)]
     for bullet in bullets:
         for enemy in enemies:
@@ -251,12 +251,19 @@ def process_collisions(spaceship,mines,enemies,bullets,frames=[]):
                 frames.append(FrameBasedAnimation(frames_explosion,0.1,enemy.x,enemy.y))
                 Sounds.SoundLibrary.play_random_explosion(soundlib, randint(0,5))
 
+    for bullet in enemybullets:
+        if bullet.hitbox.colliderect(spaceship.hitbox):
+            frames.append(FrameBasedAnimation(frames_explosion,0.1,spaceship.x,spaceship.y))
+            Sounds.SoundLibrary.play_random_explosion(soundlib, randint(0,5))
+            game_over()
+        
+
     mine_hitbox = [mine.hitbox for mine in mines]
     enemy_hitbox = [enemy.hitbox for enemy in enemies]
 
     ship_hits_mine = spaceship.hitbox.collidelist(mine_hitbox)
     ship_hits_enemy = spaceship.hitbox.collidelist(enemy_hitbox)
-    
+
     if ship_hits_mine !=-1 or ship_hits_enemy!=-1:
         Sounds.SoundLibrary.play_random_explosion(soundlib, randint(0,5))
         frames.append(FrameBasedAnimation(frames_explosion,0.1,spaceship,spaceship.y))
@@ -271,6 +278,7 @@ class State:
         self.cooldown = Cooldown(0.2)
         self.mines = [Mine()]
         self.enemies = [Enemy(1)]
+        self.enemybullets = [EnemyBullet(500,50)]
         self.explosions = []
         
     def update(self, elapsed_seconds):
@@ -278,7 +286,8 @@ class State:
         update_objects(elapsed_seconds,self.explosions)
         self.background.update(elapsed_seconds)
         self.cooldown.update(elapsed_seconds)
-        process_collisions(self.player,self.mines,self.enemies,self.bullets,self.explosions)
+        process_collisions(self.player,self.mines,self.enemies,self.bullets,self.enemybullets,self.explosions)
+        update_objects(elapsed_seconds,self.enemybullets)
         update_objects(elapsed_seconds,self.bullets)
         update_objects(elapsed_seconds,self.enemies)
                 
@@ -298,6 +307,9 @@ class State:
             bullet.render(surface)
         for explosion in self.explosions:
             explosion.render(surface)
+        for bullet in self.enemybullets:
+            bullet.render(surface)
+        
         
     
 class Background:
@@ -482,6 +494,28 @@ class Enemy():
                 case 2:
                     self.animation_enemy2.render(surface,self.x,self.y) 
 
-class MultipleEnemies(Enemy):
-    pass
+class EnemyBullet():
+    def __init__(self,x,y):
+        self.x = x
+        self.y = y
+        
+        Sounds.SoundLibrary.play_random_explosion(soundlib, 6)
+        self.speed = 300
+        self.bullet = load_image("assets/images/sprites/bullets/small.png")
+        self.__time_left = 5
+        self.disposed = False
+        self.hitbox = pygame.Rect(self.x-10,self.y-30,20,20)
+
+    def update(self, elapsed_seconds):
+        self.y += self.speed * elapsed_seconds
+        self.__time_left -= elapsed_seconds
+        if self.__time_left < 0:
+            self.disposed = True
+    
+    def render(self,surface):
+        draw_centered(surface,self.bullet,self.x+1,self.y-20)
+        self.hitbox = pygame.Rect(self.x-9,self.y-29,19,19)
+        pygame.draw.rect(surface,(0,0,0),self.hitbox,-1)
+
+
 main_menu()
