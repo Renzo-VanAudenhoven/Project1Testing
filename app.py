@@ -1,3 +1,4 @@
+from gzip import BadGzipFile
 from random import randint
 import re
 from sqlite3 import enable_callback_tracebacks
@@ -139,6 +140,7 @@ def game(skin):
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
+            
         
         event_listener(state,elapsed_seconds)
 
@@ -240,6 +242,14 @@ def update_objects(elapsed_seconds,list):
             list.remove(object)
         else: 
             j += 1
+    
+#def enemies_shoot(enemycooldown,enemybullets,enemies,elapsed_seconds):
+#    for enemy in enemies:
+#        if enemycooldown.ready and enemy.disposed != True:
+#            enemybullets.append(EnemyBullet(enemy.x,enemy.y))
+#            enemycooldown.reset()
+   #for bullet in enemybullets:
+   #    bullet.update(elapsed_seconds)
 
 def process_collisions(spaceship,mines,enemies,bullets,enemybullets,frames=[]):
     frames_explosion = [load_image(f'assets/images/sprites/explosion/{i}.png') for i in range(1,10)]
@@ -276,9 +286,10 @@ class State:
         self.player = Spaceship(skin)
         self.bullets = []
         self.cooldown = Cooldown(0.2)
+        self.enemycooldown = Cooldown(-1)
         self.mines = [Mine()]
         self.enemies = [Enemy(1)]
-        self.enemybullets = [EnemyBullet(500,50)]
+        self.enemybullets = []
         self.explosions = []
         
     def update(self, elapsed_seconds):
@@ -290,6 +301,9 @@ class State:
         update_objects(elapsed_seconds,self.enemybullets)
         update_objects(elapsed_seconds,self.bullets)
         update_objects(elapsed_seconds,self.enemies)
+        self.enemycooldown.update(elapsed_seconds) 
+        #enemies_shoot(self.enemycooldown,self.enemybullets,self.enemies,elapsed_seconds)
+        update_objects(elapsed_seconds,self.enemybullets)
                 
         for mine in self.mines:
             mine.update(elapsed_seconds)
@@ -426,8 +440,12 @@ class Cooldown:
 
     def update(self,elapsed_seconds):
         self.time_passed += elapsed_seconds
-        if self.time_passed > self.cooldown:
-            self.ready = True
+        if self.cooldown == -1:
+            if self.time_passed > randint(1,10):
+                self.ready = True
+        else:
+            if self.time_passed > self.cooldown:
+                self.ready = True
 
     def reset(self):
         self.time_passed = 0
